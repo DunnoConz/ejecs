@@ -14,11 +14,11 @@ import (
 func main() {
 	// Define flags
 	inputFile := flag.String("input", "", "Input JECS file")
-	outputFile := flag.String("output", "", "Output Luau file")
+	outputFile := flag.String("output", "", "Output file for generated code")
 	flag.Parse()
 
 	if *inputFile == "" || *outputFile == "" {
-		fmt.Println("Usage: ejecs -input <input.jecs> -output <output.luau>")
+		fmt.Println("Usage: ejecs -input <input.jecs> -output <output.cpp>")
 		os.Exit(1)
 	}
 
