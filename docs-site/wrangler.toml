@@ -1,0 +1,17 @@
+# Wrangler configuration for Cloudflare Pages
+name = "ejecs-docs"
+compatibility_date = "2025-04-09"
+
+[site]
+bucket = ".output/public"
+
+[build]
+command = "npm run build"
+output_dir = ".output/public"
+
+[env.production]
+vars = { NITRO_PRESET = "cloudflare-pages" }
+
+# Enable caching for static assets
+[cache]
+patterns = ["/*"] 
