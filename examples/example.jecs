@@ -1,0 +1,36 @@
+// example.jecs
+component Position {
+  x: number;
+  y: number;
+  z: number;
+}
+
+component Velocity {
+  x: number;
+  y: number;
+  z: number;
+}
+
+component Name {
+  value: string;
+}
+
+relationship ChildOf {}
+
+system Movement {
+  query: (Position, Velocity);
+  
+  run(entity, position, velocity) {
+    position.x += velocity.x;
+    position.y += velocity.y;
+    position.z += velocity.z;
+  }
+}
+
+system PrintChildren {
+  query: (Name, pair(ChildOf, *));
+  
+  run(entity, name, parent) {
+    print(name.value, "is a child of", getName(parent));
+  }
+}
