@@ -61,6 +61,14 @@ ejecs -input game.ejecs -output game.lua -library ecr
 - [FAQ](FAQ.md): Frequently asked questions
 - [Troubleshooting](Troubleshooting.md): Common issues and solutions
 
+## Core Concepts
+
+- **[Entities](Entities.md)**: Unique identifiers for game objects.
+- **[Components](Component-System.md)**: Data containers defining properties.
+- **[Systems](Component-System.md)**: Logic operating on entities with specific components.
+- **[Relationships](Relationships.md)**: Defining connections between entities.
+- **[Data-Oriented Design](Data-Oriented-Design.md)**: Understanding the principles behind ECS performance.
+
 ## Contributing
 
 We welcome contributions! Please see our [Contributing Guide](Contributing.md) for details on how to get started.

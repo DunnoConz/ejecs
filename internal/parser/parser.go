@@ -10,6 +10,42 @@ import (
 	"github.com/ejecs/ejecs/internal/token"
 )
 
+// Precedence levels for operators (add more as needed)
+const (
+	_ int = iota
+	LOWEST
+	EQUALS      // ==
+	LESSGREATER // > or <
+	SUM         // +
+	PRODUCT     // *
+	PREFIX      // -X or !X
+	CALL        // myFunction(X)
+	INDEX       // array[index]
+	DOT         // table.field
+)
+
+// Operator precedence map (add more operators)
+var precedences = map[token.TokenType]int{
+	token.EQ:       EQUALS,
+	token.NOT_EQ:   EQUALS,
+	token.LT:       LESSGREATER,
+	token.GT:       LESSGREATER,
+	token.LTE:      LESSGREATER,
+	token.GTE:      LESSGREATER,
+	token.PLUS:     SUM,
+	token.MINUS:    SUM,
+	token.SLASH:    PRODUCT,
+	token.ASTERISK: PRODUCT,
+	token.LPAREN:   CALL, // For function calls
+	token.DOT:      DOT,  // For member access like CFrame.new
+}
+
+// Pratt parser function types
+type (
+	prefixParseFn func() (ast.Expression, error)
+	infixParseFn  func(ast.Expression) (ast.Expression, error)
+)
+
 // Parser represents a JECS parser
 type Parser struct {
 	l *lexer.Lexer
@@ -18,6 +54,9 @@ type Parser struct {
 	peekToken token.Token
 
 	errors []string
+
+	prefixParseFns map[token.TokenType]prefixParseFn
+	infixParseFns  map[token.TokenType]infixParseFn
 }
 
 // Error represents a parsing error
@@ -39,11 +78,38 @@ func New(input string) *Parser {
 		errors: []string{},
 	}
 
-	// Read two tokens so curToken and peekToken are both set
+	// Initialize parsing function maps
+	p.prefixParseFns = make(map[token.TokenType]prefixParseFn)
+	p.registerPrefix(token.IDENT, p.parseIdentifier)
+	p.registerPrefix(token.INT, p.parseNumberLiteral)
+	p.registerPrefix(token.FLOAT, p.parseNumberLiteral)
+	p.registerPrefix(token.STRING, p.parseStringLiteral)
+	p.registerPrefix(token.TRUE, p.parseBooleanLiteral)
+	p.registerPrefix(token.FALSE, p.parseBooleanLiteral)
+	p.registerPrefix(token.LBRACE, p.parseTableConstructor)  // For table constructors {}
+	p.registerPrefix(token.LPAREN, p.parseGroupedExpression) // For ( expression )
+	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
+	p.registerPrefix(token.BANG, p.parsePrefixExpression)
+
+	p.infixParseFns = make(map[token.TokenType]infixParseFn)
+	p.registerInfix(token.LPAREN, p.parseCallExpression)      // For func()
+	p.registerInfix(token.DOT, p.parseMemberAccessExpression) // For table.field or CFrame.new
+	// Add other infix operators (+, -, *, /, ==, <, etc.) if needed
+
+	// Read two tokens, so curToken and peekToken are both set.
 	p.nextToken()
 	p.nextToken()
 
 	return p
+}
+
+// Helper registration functions
+func (p *Parser) registerPrefix(tokenType token.TokenType, fn prefixParseFn) {
+	p.prefixParseFns[tokenType] = fn
+}
+
+func (p *Parser) registerInfix(tokenType token.TokenType, fn infixParseFn) {
+	p.infixParseFns[tokenType] = fn
 }
 
 func (p *Parser) Errors() []string {
@@ -68,7 +134,10 @@ func (p *Parser) ParseProgram() (*ast.Program, error) {
 		switch p.curToken.Type {
 		case token.COMPONENT:
 			stmt, err = p.parseComponent()
-		case token.RELATIONSHIP:
+		case token.RELATIONSHIP, token.AT:
+			if p.curTokenIs(token.AT) && !p.peekTokenIs(token.IDENT) {
+				return nil, p.newError("expected identifier after @ for relationship type, got %s", p.peekToken.Type)
+			}
 			stmt, err = p.parseRelationship()
 		case token.SYSTEM:
 			stmt, err = p.parseSystem()
@@ -132,6 +201,8 @@ func (p *Parser) parseComponent() (*ast.Component, error) {
 
 func (p *Parser) parseField() (*ast.Field, error) {
 	field := &ast.Field{}
+	var defaultValueExpr ast.Expression
+	var err error
 
 	// Check if the type is 'table'
 	if p.curTokenIs(token.TABLE) {
@@ -203,57 +274,32 @@ func (p *Parser) parseField() (*ast.Field, error) {
 		return nil, p.newError("expected field type (identifier or 'table'), got %s", p.curToken.Type)
 	}
 
-	// --- Common Logic: Default Value and Semicolon ---
-
-	// Expect optional default value
+	// --- Optional Default Value ---
 	if p.curTokenIs(token.ASSIGN) {
-		p.nextToken()                // Consume '='
-		startLine := p.curToken.Line // For error reporting or storing skipped value
-		startCol := p.curToken.Column
-
-		// If default value starts with {, skip until matching }
-		if p.curTokenIs(token.LBRACE) {
-			braceLevel := 1
-			for braceLevel > 0 {
-				p.nextToken()
-				if p.curTokenIs(token.EOF) {
-					return nil, p.newErrorf(startLine, startCol, "unmatched '{'")
-				}
-				if p.curTokenIs(token.LBRACE) {
-					braceLevel++
-				} else if p.curTokenIs(token.RBRACE) {
-					braceLevel--
-				}
-			}
-			// At this point, curToken is the matching RBRACE
-			field.DefaultValue = "{...}" // Indicate skipped table
-			p.nextToken()                // Consume the final RBRACE
-		} else if p.curTokenIs(token.STRING) || p.curTokenIs(token.INT) || p.curTokenIs(token.FLOAT) || p.curTokenIs(token.TRUE) || p.curTokenIs(token.FALSE) {
-			// Handle simple literals
-			field.DefaultValue = p.curToken.Literal
-			p.nextToken() // Consume the literal
-		} else {
-			// Unknown default value - skip until semicolon
-			fmt.Printf("DEBUG: Skipping unknown default value starting with %s (%q) at %d:%d\n",
-				p.curToken.Type, p.curToken.Literal, p.curToken.Line, p.curToken.Column)
-			os.Stdout.Sync()
-			for !p.curTokenIs(token.SEMICOLON) && !p.curTokenIs(token.EOF) {
-				p.nextToken()
-			}
-			if p.curTokenIs(token.EOF) {
-				return nil, p.newErrorf(startLine, startCol, "missing ';' after complex default value?")
-			}
-			// Do not consume the semicolon here, let the final check handle it.
-			field.DefaultValue = "<skipped>" // Indicate skipped complex value
-			// Current token should now be SEMICOLON
+		p.nextToken() // Consume '='
+		defaultValueExpr, err = p.parseExpression(LOWEST)
+		if err != nil {
+			return nil, err
 		}
+		field.DefaultValue = defaultValueExpr
+		// parseExpression leaves curToken on the last token of the expression.
 	}
 
-	// Expect ';'
-	if !p.curTokenIs(token.SEMICOLON) {
-		return nil, p.newError("expected ';', got %s (%q)", p.curToken.Type, p.curToken.Literal)
+	// --- Find the semicolon ---
+	// After type/name and optional default value, skip until we find the semicolon.
+	// This simplifies handling the end of potentially complex default value expressions.
+	for !p.curTokenIs(token.SEMICOLON) && !p.curTokenIs(token.EOF) {
+		// Maybe add a check here to prevent infinite loops if semicolon is missing on the line?
+		p.nextToken()
 	}
-	p.nextToken() // Consume ';'
+
+	if !p.curTokenIs(token.SEMICOLON) {
+		// If we hit EOF without finding semicolon, report error at the field name's position (approx)
+		// TODO: Improve error position reporting
+		return nil, p.newError("missing ';' after field definition for field '%s'", field.Name)
+	}
+
+	p.nextToken() // Consume the SEMICOLON.
 
 	return field, nil
 }
@@ -455,7 +501,7 @@ func (p *Parser) parseSystem() (*ast.System, error) {
 				return nil, p.newError("unexpected identifier '%s' in system body", p.curToken.Literal)
 			}
 		case token.FREQUENCY:
-			if system.Frequency != "" {
+			if system.Frequency != nil {
 				return nil, p.newError("duplicate frequency definition")
 			}
 			p.nextToken() // Consume 'frequency'
@@ -464,20 +510,16 @@ func (p *Parser) parseSystem() (*ast.System, error) {
 			}
 			p.nextToken() // Consume ':'
 
-			// Skip tokens until end of line or next block starter
-			startLine := p.curToken.Line
-			for p.curToken.Line == startLine &&
-				!p.curTokenIs(token.EOF) &&
-				!p.curTokenIs(token.PRIORITY) &&
-				!p.curTokenIs(token.LBRACE) {
-				// TODO: Actually parse/store this value correctly
-				p.nextToken()
+			freqExpr, err := p.parseExpression(LOWEST)
+			if err != nil {
+				return nil, err
 			}
-			system.Frequency = "<skipped>" // Placeholder
-			// Do not consume the token that stopped the loop (priority, {, or EOF)
+			system.Frequency = freqExpr
+			// parseExpression leaves curToken on the last token of the expression (e.g., the closing ')' of fixed(60) )
+			p.nextToken() // Consume the last token of the frequency expression
 
 		case token.PRIORITY:
-			if system.Priority != "" {
+			if system.Priority != nil {
 				return nil, p.newError("duplicate priority definition")
 			}
 			p.nextToken() // Consume 'priority'
@@ -485,17 +527,15 @@ func (p *Parser) parseSystem() (*ast.System, error) {
 				return nil, p.newError("expected ':' after priority, got %s", p.curToken.Type)
 			}
 			p.nextToken() // Consume ':'
-			if !p.curTokenIs(token.INT) {
-				// For now, let's skip non-int priority too until we parse expressions
-				startLine := p.curToken.Line
-				for p.curToken.Line == startLine && !p.curTokenIs(token.EOF) && !p.curTokenIs(token.LBRACE) {
-					p.nextToken()
-				}
-				system.Priority = "<skipped>"
-			} else {
-				system.Priority = p.curToken.Literal
-				p.nextToken() // Consume value
+
+			prioExpr, err := p.parseExpression(LOWEST)
+			if err != nil {
+				return nil, err
 			}
+			system.Priority = prioExpr
+			// parseExpression leaves curToken on the last token of the expression (e.g., the INT 100)
+			p.nextToken() // Consume the last token of the priority expression
+
 		case token.LBRACE: // Start of the code block
 			if codeParsed {
 				return nil, p.newError("multiple code blocks found in system")
@@ -549,16 +589,17 @@ func (p *Parser) parseParametersBlock() ([]*ast.Parameter, error) {
 		// Optional default value
 		if p.curTokenIs(token.ASSIGN) {
 			p.nextToken() // Consume =
-			if p.curTokenIs(token.STRING) || p.curTokenIs(token.INT) || p.curTokenIs(token.FLOAT) || p.curTokenIs(token.TRUE) || p.curTokenIs(token.FALSE) {
-				param.DefaultValue = p.curToken.Literal
-				p.nextToken() // Consume value
-			} else {
-				return nil, p.newError("expected simple literal for parameter default value, got %s", p.curToken.Type)
+			defaultValueExpr, err := p.parseExpression(LOWEST)
+			if err != nil {
+				return nil, err
 			}
+			param.DefaultValue = defaultValueExpr // Assign expression node
+			// parseExpression leaves curToken on last token of expr
+			p.nextToken() // Consume last token of default value expr
 		}
 
 		if !p.curTokenIs(token.SEMICOLON) {
-			return nil, p.newError("expected ';' after parameter definition, got %s", p.curToken.Type)
+			return nil, p.newError("expected ';' after parameter definition, got %s (%q)", p.curToken.Type, p.curToken.Literal)
 		}
 		p.nextToken() // Consume ;
 
@@ -573,16 +614,68 @@ func (p *Parser) parseParametersBlock() ([]*ast.Parameter, error) {
 	return params, nil
 }
 
+// Reverted parseCodeBlock: Reconstruct with heuristic spacing (imperfect)
 func (p *Parser) parseCodeBlock() string {
 	var code strings.Builder
-	for p.curToken.Type != token.RBRACE {
+	startLine := p.curToken.Line // Line where the opening { was - FOR ERROR REPORTING ONLY
+
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
 		code.WriteString(p.curToken.Literal)
-		if p.peekToken.Type != token.RBRACE {
+
+		// Add space only if syntactically likely needed
+		if shouldAddSpace(p.curToken, p.peekToken) {
 			code.WriteString(" ")
 		}
 		p.nextToken()
 	}
+
+	if p.curTokenIs(token.EOF) {
+		// Error: reached EOF before finding matching RBRACE
+		p.newErrorf(startLine, 0, "unterminated code block starting on line %d", startLine)
+		// Return what we have, maybe?
+	}
+
 	return code.String()
+}
+
+// shouldAddSpace heuristic: determines if a space should be added AFTER cur and BEFORE peek.
+func shouldAddSpace(cur, peek token.Token) bool {
+	// Never add space before the final closing brace of the code block
+	if peek.Type == token.RBRACE {
+		return false
+	}
+
+	// Never add space before punctuation that doesn't need leading space
+	switch peek.Type {
+	case token.DOT, token.COMMA, token.SEMICOLON, token.COLON,
+		token.LPAREN, token.RPAREN, token.LBRACKET, token.RBRACKET, token.LBRACE: // Don't add space before {, but maybe after
+		return false
+	}
+
+	// Never add space AFTER punctuation that doesn't need trailing space
+	switch cur.Type {
+	case token.DOT, token.LPAREN, token.LBRACKET, token.LBRACE, token.AT: // Don't add space after { or (
+		return false
+	}
+
+	// General rule: Add space between two "word-like" tokens
+	curIsWord := isWordToken(cur)
+	peekIsWord := isWordToken(peek)
+
+	return curIsWord && peekIsWord
+}
+
+// isWordToken checks if a token is typically treated as a word requiring spacing.
+func isWordToken(tok token.Token) bool {
+	switch tok.Type {
+	case token.IDENT, token.INT, token.FLOAT, token.STRING, token.TRUE, token.FALSE,
+		token.COMPONENT, token.SYSTEM, token.RELATIONSHIP, token.QUERY, // Removed PARAMS
+		token.FREQUENCY, token.PRIORITY, token.RETURN, token.FUNCTION, // More keywords if needed
+		token.IF, token.ELSE, token.FOR, token.WHILE: // Removed DO, END, LOCAL
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *Parser) expectPeek(t token.TokenType) bool {
@@ -619,4 +712,251 @@ func (p *Parser) newErrorf(line, column int, format string, args ...interface{})
 		Column:  column,
 		Message: msg,
 	}
+}
+
+// --- Expression Parsing ---
+
+func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
+	prefix := p.prefixParseFns[p.curToken.Type]
+	if prefix == nil {
+		return nil, p.newError("no prefix parse function for %s found", p.curToken.Type)
+	}
+	leftExp, err := prefix()
+	if err != nil {
+		return nil, err
+	}
+
+	// Loop for infix operators
+	for !p.peekTokenIs(token.SEMICOLON) && precedence < p.peekPrecedence() {
+		infix := p.infixParseFns[p.peekToken.Type]
+		if infix == nil {
+			return leftExp, nil // No infix operator found or lower precedence
+		}
+
+		p.nextToken() // Consume the infix operator
+		leftExp, err = infix(leftExp)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return leftExp, nil
+}
+
+// Get precedence of the *next* token
+func (p *Parser) peekPrecedence() int {
+	if p, ok := precedences[p.peekToken.Type]; ok {
+		return p
+	}
+	return LOWEST
+}
+
+// Get precedence of the *current* token
+func (p *Parser) curPrecedence() int {
+	if p, ok := precedences[p.curToken.Type]; ok {
+		return p
+	}
+	return LOWEST
+}
+
+// Placeholder parsing functions
+func (p *Parser) parseIdentifier() (ast.Expression, error) {
+	return &ast.Identifier{Value: p.curToken.Literal}, nil
+}
+
+func (p *Parser) parseNumberLiteral() (ast.Expression, error) {
+	return &ast.NumberLiteral{Value: p.curToken.Literal}, nil
+}
+
+func (p *Parser) parseStringLiteral() (ast.Expression, error) {
+	return &ast.StringLiteral{Value: p.curToken.Literal}, nil
+}
+
+func (p *Parser) parseBooleanLiteral() (ast.Expression, error) {
+	return &ast.BooleanLiteral{Value: p.curTokenIs(token.TRUE)}, nil
+}
+
+func (p *Parser) parseGroupedExpression() (ast.Expression, error) {
+	p.nextToken() // Consume '('
+	exp, err := p.parseExpression(LOWEST)
+	if err != nil {
+		return nil, err
+	}
+	if !p.expectPeek(token.RPAREN) { // Consume ')'
+		return nil, p.newError("expected ')' after grouped expression")
+	}
+	return exp, nil
+}
+
+func (p *Parser) parseTableConstructor() (ast.Expression, error) {
+	table := &ast.TableConstructor{Fields: []*ast.TableField{}}
+	startLine, startCol := p.curToken.Line, p.curToken.Column // For error reporting
+
+	// Handle empty table {}
+	if p.peekTokenIs(token.RBRACE) {
+		p.nextToken() // Consume {
+		p.nextToken() // Consume }
+		return table, nil
+	}
+
+	p.nextToken() // Consume {
+
+	// Parse first field
+	keyExpr, valueExpr, err := p.parseTableField()
+	if err != nil {
+		return nil, err
+	}
+	table.Fields = append(table.Fields, &ast.TableField{Key: keyExpr, Value: valueExpr})
+
+	// Parse subsequent fields (comma-separated)
+	for p.curTokenIs(token.COMMA) {
+		p.nextToken() // Consume ,
+
+		// Allow trailing comma
+		if p.curTokenIs(token.RBRACE) {
+			break
+		}
+
+		keyExpr, valueExpr, err := p.parseTableField()
+		if err != nil {
+			return nil, err
+		}
+		table.Fields = append(table.Fields, &ast.TableField{Key: keyExpr, Value: valueExpr})
+	}
+
+	// Expect closing brace
+	if !p.curTokenIs(token.RBRACE) {
+		return nil, p.newErrorf(startLine, startCol, "expected '}' or ',' in table constructor, got %s", p.curToken.Type)
+	}
+	p.nextToken() // Consume }
+
+	return table, nil
+}
+
+// Parses a single field inside a table constructor: [expr]=expr, ident=expr, or just expr
+func (p *Parser) parseTableField() (ast.Expression, ast.Expression, error) {
+	var key, value ast.Expression
+	var err error
+
+	// Check for different key syntaxes or just a value
+	if p.curTokenIs(token.LBRACKET) {
+		// Key is an expression: [expr] = value
+		p.nextToken() // Consume [
+		key, err = p.parseExpression(LOWEST)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !p.expectPeek(token.RBRACKET) {
+			return nil, nil, p.newError("expected ']' after table key expression")
+		}
+		if !p.expectPeek(token.ASSIGN) {
+			return nil, nil, p.newError("expected '=' after table key expression")
+		}
+		value, err = p.parseExpression(LOWEST)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else if p.curTokenIs(token.IDENT) && p.peekTokenIs(token.ASSIGN) {
+		// Key is an identifier: key = value
+		key = &ast.Identifier{Value: p.curToken.Literal}
+		p.nextToken() // Consume ident
+		p.nextToken() // Consume =
+		value, err = p.parseExpression(LOWEST)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		// Key is nil, just a value (array-like table)
+		key = nil
+		value, err = p.parseExpression(LOWEST)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	// Consume the last token of the value expression before returning
+	p.nextToken()
+
+	return key, value, nil
+}
+
+func (p *Parser) parseCallExpression(function ast.Expression) (ast.Expression, error) {
+	call := &ast.CallExpression{Function: function}
+	var err error
+	call.Arguments, err = p.parseExpressionList(token.RPAREN)
+	if err != nil {
+		return nil, err
+	}
+	return call, nil
+}
+
+// Helper to parse comma-separated expressions until an end token
+func (p *Parser) parseExpressionList(end token.TokenType) ([]ast.Expression, error) {
+	list := []ast.Expression{}
+
+	if p.peekTokenIs(end) { // Handle empty list like func()
+		p.nextToken() // Consume the end token
+		return list, nil
+	}
+
+	p.nextToken() // Consume LPAREN or COMMA
+	exp, err := p.parseExpression(LOWEST)
+	if err != nil {
+		return nil, err
+	}
+	list = append(list, exp)
+
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken() // Consume ,
+		p.nextToken() // Move to the start of the next expression
+		exp, err := p.parseExpression(LOWEST)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, exp)
+	}
+
+	if !p.expectPeek(end) { // Consume the end token
+		return nil, p.newError("expected '%s' to end expression list", end)
+	}
+
+	return list, nil
+}
+
+// Parses member access like table.field or CFrame.new
+func (p *Parser) parseMemberAccessExpression(left ast.Expression) (ast.Expression, error) {
+	if !p.curTokenIs(token.DOT) {
+		return nil, p.newError("expected '.' for member access")
+	}
+	p.nextToken() // Consume '.'
+
+	if !p.curTokenIs(token.IDENT) {
+		return nil, p.newError("expected identifier after '.'")
+	}
+
+	member := &ast.Identifier{Value: p.curToken.Literal}
+
+	exp := &ast.MemberAccessExpression{
+		Object:     left,
+		MemberName: member,
+	}
+
+	// Do not consume the member identifier here;
+	// the main parseExpression loop will handle the next token.
+
+	return exp, nil
+}
+
+// Parsing function for prefix operators like - or !
+func (p *Parser) parsePrefixExpression() (ast.Expression, error) {
+	expression := &ast.PrefixExpression{
+		Operator: p.curToken.Literal,
+	}
+	p.nextToken() // Consume the operator token (e.g., '-')
+	var err error
+	expression.Right, err = p.parseExpression(PREFIX) // Parse the operand with PREFIX precedence
+	if err != nil {
+		return nil, err
+	}
+	return expression, nil
 }

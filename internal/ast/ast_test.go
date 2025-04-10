@@ -82,20 +82,20 @@ func TestSystem_String(t *testing.T) {
 		{
 			name: "basic system",
 			sys: &System{
-				Name:       "Movement",
-				Components: []string{"Position", "Velocity"},
+				Name:  "Movement",
+				Query: &Query{Components: []string{"Position", "Velocity"}},
 			},
-			expected: "system Movement {\n    using Position, Velocity\n}",
+			expected: "system Movement {\n    query: {\n        components: [Position, Velocity]\n        relations: []\n    }\n}",
 		},
 		{
 			name: "system with frequency and priority",
 			sys: &System{
-				Name:       "Physics",
-				Components: []string{"RigidBody"},
-				Frequency:  "60hz",
-				Priority:   "1",
+				Name:      "Physics",
+				Query:     &Query{Components: []string{"RigidBody"}},
+				Frequency: &Identifier{Value: "60hz"},
+				Priority:  &NumberLiteral{Value: "1"},
 			},
-			expected: "system Physics {\n    using RigidBody\n    frequency: 60hz\n    priority: 1\n}",
+			expected: "system Physics {\n    query: {\n        components: [RigidBody]\n        relations: []\n    }\n    frequency: 60hz\n    priority: 1\n}",
 		},
 	}
 
@@ -103,7 +103,7 @@ func TestSystem_String(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.sys.String()
 			if got != tt.expected {
-				t.Errorf("System.String() = %v, want %v", got, tt.expected)
+				t.Errorf("System.String() wrong.\nexpected=%q\ngot=%q", tt.expected, got)
 			}
 		})
 	}
@@ -186,8 +186,8 @@ func TestString(t *testing.T) {
 			&Component{
 				Name: "Player",
 				Fields: []*Field{
-					{Name: "health", Type: "int"},
-					{Name: "position", Type: "Vector3"},
+					{Name: "health", Type: "int", DefaultValue: &NumberLiteral{Value: "100"}},
+					{Name: "position", Type: "Vector3"}, // No default
 				},
 			},
 			&Relationship{
@@ -199,8 +199,8 @@ func TestString(t *testing.T) {
 			&System{
 				Name: "MovementSystem",
 				Parameters: []*Parameter{
-					{Name: "speed", Type: "float", DefaultValue: "1.0"},
-					{Name: "maxSpeed", Type: "float", DefaultValue: "10.0"},
+					{Name: "speed", Type: "float", DefaultValue: &NumberLiteral{Value: "1.0"}},
+					{Name: "maxSpeed", Type: "float", DefaultValue: &NumberLiteral{Value: "10.0"}},
 				},
 				Query: &Query{
 					Components: []string{"Position", "Velocity"},
@@ -208,42 +208,24 @@ func TestString(t *testing.T) {
 						{Type: "parent", Component: "Movement"},
 					},
 				},
-				Frequency: "60",
-				Priority:  "1",
+				Frequency: &Identifier{Value: "fixed60"},
+				Priority:  &NumberLiteral{Value: "1"},
 				Code:      "position.x += velocity.x * speed",
 			},
 		},
 	}
 
-	expected := `component Player {
-    health: int
-    position: Vector3
-}
+	// Expected output based on the String() methods in ast.go
+	// Note: String() methods for expressions might need adjustment for perfect match
+	expected := strings.Join([]string{
+		"component Player {\n    health: int = 100\n    position: Vector3\n}",
+		"@parent\nrelationship PlayerMovement {\n    child: Player\n    parent: Movement\n}",
+		"system MovementSystem {\n    parameters: {\n        speed: float = 1.0\n        maxSpeed: float = 10.0\n    }\n    query: {\n        components: [Position, Velocity]\n        relations: [pair(parent, Movement)]\n    }\n    frequency: fixed60\n    priority: 1\n    code: {\n        position.x += velocity.x * speed\n    }\n}",
+	}, "\n")
 
-@parent
-relationship PlayerMovement {
-    child: Player
-    parent: Movement
-}
-
-system MovementSystem {
-    parameters: {
-        speed: float = 1.0
-        maxSpeed: float = 10.0
-    }
-    query: {
-        components: [Position, Velocity]
-        relations: [pair(parent, Movement)]
-    }
-    frequency: 60
-    priority: 1
-    code: {
-        position.x += velocity.x * speed
-    }
-}`
-
-	if program.String() != expected {
+	got := program.String()
+	if got != expected {
 		t.Errorf("program.String() wrong.\nexpected=%q\ngot=%q",
-			expected, program.String())
+			expected, got)
 	}
 }

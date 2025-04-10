@@ -5,12 +5,15 @@ node_modules
 Thumbs.db
 
 # Build artifacts
-ejecs
+/ejecs
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
+
+# Generated Example Files
+/examples/*.lua
 
 # IDE specific files
 .idea/

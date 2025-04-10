@@ -240,16 +240,36 @@ func (l *Lexer) readNumber() string {
 }
 
 func (l *Lexer) readString(quote byte) string {
-	position := l.position + 1 // Start after the opening quote
+	var value strings.Builder
 	for {
 		l.readChar()
-		if l.ch == quote || l.ch == 0 {
+		if l.ch == '\\' { // Handle escape sequence
+			l.readChar() // Read the character after backslash
+			switch l.ch {
+			case 'n':
+				value.WriteByte('\n')
+			case 't':
+				value.WriteByte('\t')
+			case 'r':
+				value.WriteByte('\r')
+			case '\'':
+				value.WriteByte('\'')
+			case '"':
+				value.WriteByte('"')
+			case '\\':
+				value.WriteByte('\\')
+			default:
+				// Optional: Report error for invalid escape or just include backslash + char
+				value.WriteByte('\\')
+				value.WriteByte(l.ch)
+			}
+		} else if l.ch == quote || l.ch == 0 { // End on matching quote or EOF
 			break
+		} else {
+			value.WriteByte(l.ch) // Append regular character
 		}
-		// TODO: Handle escape sequences
 	}
-	str := l.input[position:l.position] // Should exclude quotes
-	return str
+	return value.String()
 }
 
 func (l *Lexer) readComment() {

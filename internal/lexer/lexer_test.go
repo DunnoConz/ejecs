@@ -33,7 +33,7 @@ func TestNextTokenBasic(t *testing.T) {
 		{token.IDENT, "float"},
 		{token.IDENT, "y"},
 		{token.COLON, ":"},
-		{token.FLOAT, "float"},
+		{token.IDENT, "float"},
 		{token.RBRACE, "}"},
 		{token.SYSTEM, "system"},
 		{token.IDENT, "Movement"},
@@ -50,7 +50,6 @@ func TestNextTokenBasic(t *testing.T) {
 		{token.CODE, "code"},
 		{token.COLON, ":"},
 		{token.LBRACE, "{"},
-		{token.IDENT, "// Update position"},
 		{token.RBRACE, "}"},
 		{token.RBRACE, "}"},
 		{token.EOF, ""},
@@ -62,8 +61,8 @@ func TestNextTokenBasic(t *testing.T) {
 		tok := l.NextToken()
 
 		if tok.Type != tt.expectedTokenType {
-			t.Fatalf("basicTests[%d] - tokentype wrong. expected=%q, got=%q",
-				i, tt.expectedTokenType, tok.Type)
+			t.Fatalf("basicTests[%d] - tokentype wrong. expected=%q, got=%q (%s)",
+				i, tt.expectedTokenType, tok.Type, tok.Literal)
 		}
 
 		if tok.Literal != tt.expectedTokenLit {
