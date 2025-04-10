@@ -6,7 +6,7 @@ compatibility_date = "2025-04-09"
 bucket = ".output/public"
 
 [build]
-command = "npm run build"
+command = "npm install && npm run build"
 output_dir = ".output/public"
 
 [env.production]
