@@ -16,7 +16,7 @@ const REQUIRED_DIRS = [
 ];
 
 function validateBuild() {
-  const outputDir = path.join(process.cwd(), '.output/public');
+  const outputDir = path.join(process.cwd(), 'dist');
   
   // Check if output directory exists
   if (!fs.existsSync(outputDir)) {

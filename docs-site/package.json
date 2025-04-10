@@ -8,10 +8,12 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "pages:dev": "wrangler pages dev .output/public --compatibility-date=2024-01-01",
-    "pages:deploy": "npm run validate && wrangler pages deploy .output/public",
+    "pages:deploy": "npm run validate && wrangler pages deploy dist",
     "clean": "rm -rf .nuxt .output node_modules package-lock.json",
     "validate": "npm run build && node scripts/validate-build.js",
-    "postinstall": "node scripts/check-versions.js"
+    "postinstall": "node scripts/check-versions.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "@nuxt/content": "2.8.5",
