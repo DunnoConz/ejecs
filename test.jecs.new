@@ -1,0 +1,60 @@
+// test.jecs
+component Position {
+  x: number;
+  y: number;
+  z: number;
+}
+
+component Velocity {
+  x: number;
+  y: number;
+  z: number;
+}
+
+component Health {
+  max: number;
+  current: number;
+}
+
+system Movement {
+  components: [Position, Velocity];
+  
+  run(entity, components) {
+    local pos = components[Position];
+    local vel = components[Velocity];
+    
+    pos.x = pos.x + vel.x;
+    pos.y = pos.y + vel.y;
+    pos.z = pos.z + vel.z;
+    
+    print("Entity " .. entity .. " moved to (" .. pos.x .. ", " .. pos.y .. ", " .. pos.z .. ")");
+  }
+}
+
+system Health {
+  components: [Health];
+  
+  run(entity, components) {
+    local hp = components[Health];
+    
+    if hp.current <= 0 then
+      print("Entity " .. entity .. " has died");
+      world:destroyEntity(entity);
+    end
+  }
+}
+
+// Test entities
+world:createEntity({
+  Position = { x = 0, y = 0, z = 0 },
+  Velocity = { x = 1, y = 2, z = 3 },
+  Health = { max = 100, current = 100 }
+});
+
+// Run simulation
+print("Starting test simulation...");
+
+for i = 1, 3 do
+  print("\nFrame " .. i .. ":");
+  world:update();
+end 
