@@ -93,7 +93,7 @@ func TestSystem_String(t *testing.T) {
 				Name:       "Physics",
 				Components: []string{"RigidBody"},
 				Frequency:  "60hz",
-				Priority:   1,
+				Priority:   "1",
 			},
 			expected: "system Physics {\n    using RigidBody\n    frequency: 60hz\n    priority: 1\n}",
 		},
@@ -118,21 +118,21 @@ func TestRelationship_String(t *testing.T) {
 		{
 			name: "basic relationship",
 			rel: &Relationship{
-				Name: "ChildOf",
-				From: "child",
-				To:   "parent",
+				Name:   "ChildOf",
+				Child:  "child",
+				Parent: "parent",
 			},
-			expected: "relationship ChildOf {\n    child: Entity\n    parent: Entity\n}",
+			expected: "relationship ChildOf {\n    child: child\n    parent: parent\n}",
 		},
 		{
 			name: "relationship with type",
 			rel: &Relationship{
-				Name: "Inventory",
-				From: "item",
-				To:   "container",
-				Type: "many_to_one",
+				Name:   "Inventory",
+				Child:  "item",
+				Parent: "container",
+				Type:   "many_to_one",
 			},
-			expected: "@many_to_one\nrelationship Inventory {\n    item: Entity\n    container: Entity\n}",
+			expected: "@many_to_one\nrelationship Inventory {\n    child: item\n    parent: container\n}",
 		},
 	}
 
@@ -148,39 +148,102 @@ func TestRelationship_String(t *testing.T) {
 
 func TestProgram_String(t *testing.T) {
 	prog := &Program{
-		Components: []*Component{
-			{
+		Statements: []Node{
+			&Component{
 				Name: "Position",
 				Fields: []*Field{
 					{Name: "x", Type: "number"},
 					{Name: "y", Type: "number"},
 				},
 			},
-		},
-		Systems: []*System{
-			{
+			&Relationship{
+				Name:   "ChildOf",
+				Child:  "child",
+				Parent: "parent",
+			},
+			&System{
 				Name:       "Movement",
 				Components: []string{"Position", "Velocity"},
-			},
-		},
-		Relationships: []*Relationship{
-			{
-				Name: "ChildOf",
-				From: "child",
-				To:   "parent",
 			},
 		},
 	}
 
 	expected := strings.Join([]string{
 		"component Position {\n    x: number\n    y: number\n}",
-		"relationship ChildOf {\n    child: Entity\n    parent: Entity\n}",
+		"relationship ChildOf {\n    child: child\n    parent: parent\n}",
 		"system Movement {\n    using Position, Velocity\n}",
-		"",
 	}, "\n")
 
 	got := prog.String()
 	if got != expected {
-		t.Errorf("Program.String() = %v, want %v", got, expected)
+		t.Errorf("Program.String() wrong.\nexpected=%q\ngot=%q", expected, got)
+	}
+}
+
+func TestString(t *testing.T) {
+	program := &Program{
+		Statements: []Node{
+			&Component{
+				Name: "Player",
+				Fields: []*Field{
+					{Name: "health", Type: "int"},
+					{Name: "position", Type: "Vector3"},
+				},
+			},
+			&Relationship{
+				Type:   "parent",
+				Name:   "PlayerMovement",
+				Child:  "Player",
+				Parent: "Movement",
+			},
+			&System{
+				Name: "MovementSystem",
+				Parameters: []*Parameter{
+					{Name: "speed", Type: "float", DefaultValue: "1.0"},
+					{Name: "maxSpeed", Type: "float", DefaultValue: "10.0"},
+				},
+				Query: &Query{
+					Components: []string{"Position", "Velocity"},
+					Relations: []*Relation{
+						{Type: "parent", Component: "Movement"},
+					},
+				},
+				Frequency: "60",
+				Priority:  "1",
+				Code:      "position.x += velocity.x * speed",
+			},
+		},
+	}
+
+	expected := `component Player {
+    health: int
+    position: Vector3
+}
+
+@parent
+relationship PlayerMovement {
+    child: Player
+    parent: Movement
+}
+
+system MovementSystem {
+    parameters: {
+        speed: float = 1.0
+        maxSpeed: float = 10.0
+    }
+    query: {
+        components: [Position, Velocity]
+        relations: [pair(parent, Movement)]
+    }
+    frequency: 60
+    priority: 1
+    code: {
+        position.x += velocity.x * speed
+    }
+}`
+
+	if program.String() != expected {
+		t.Errorf("program.String() wrong.\nexpected=%q\ngot=%q",
+			expected, program.String())
 	}
 }

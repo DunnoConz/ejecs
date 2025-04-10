@@ -1,0 +1,120 @@
+// Character Controller Example
+// Demonstrates Roblox-specific types and integration
+
+component CharacterController {
+    Instance model;              // Character model
+    Instance? humanoid;          // Optional humanoid
+    number walkSpeed = 16;       // Walking speed in studs/s
+    number jumpPower = 50;       // Jump force
+    Vector3 moveDirection;       // Current movement direction
+    boolean isJumping = false;   // Jump state
+    table<string, any> states;   // Updated syntax
+}
+
+component CharacterAnimation {
+    Instance? animator;          // Animator instance
+    table<string, string> animations = {
+        idle = "rbxassetid://123456",
+        walk = "rbxassetid://234567",
+        jump = "rbxassetid://345678"
+    };
+    string currentAnim = "idle"; // Current animation
+}
+
+component CharacterInput {
+    Vector2 movement;           // WASD/Gamepad movement
+    boolean jump;               // Jump input
+    CFrame cameraOffset = CFrame.new(0, 5, -10); // Camera position
+}
+
+// System for handling character movement
+system CharacterMovement {
+    query(CharacterController, CharacterInput)
+    params {
+        number deltaTime;
+    }
+    frequency: fixed(60)
+    priority: 100
+    {
+        for _, entity in ipairs(entities) do
+            local controller = entity.CharacterController
+            local input = entity.CharacterInput
+            
+            // Convert input to world space movement
+            local camera = workspace.CurrentCamera
+            local lookVector = camera.CFrame.LookVector
+            local rightVector = camera.CFrame.RightVector
+            
+            local moveVector = Vector3.new(
+                input.movement.X * rightVector.X + input.movement.Y * lookVector.X,
+                0,
+                input.movement.X * rightVector.Z + input.movement.Y * lookVector.Z
+            ).Unit * controller.walkSpeed
+            
+            // Apply movement
+            if controller.humanoid then
+                controller.humanoid:Move(moveVector)
+            end
+            
+            // Handle jumping
+            if input.jump and not controller.isJumping then
+                controller.isJumping = true
+                if controller.humanoid then
+                    controller.humanoid.Jump = true
+                end
+            end
+        end
+    }
+}
+
+// System for updating character animations
+system CharacterAnimator {
+    query(CharacterController, CharacterAnimation)
+    {
+        for _, entity in ipairs(entities) do
+            local controller = entity.CharacterController
+            local anim = entity.CharacterAnimation
+            
+            if not anim.animator then
+                continue
+            end
+            
+            // Determine animation state
+            local newAnim = "idle"
+            if controller.isJumping then
+                newAnim = "jump"
+            elseif controller.moveDirection.Magnitude > 0.1 then
+                newAnim = "walk"
+            end
+            
+            // Change animation if needed
+            if newAnim ~= anim.currentAnim then
+                anim.currentAnim = newAnim
+                anim.animator:LoadAnimation(anim.animations[newAnim]):Play()
+            end
+        end
+    }
+}
+
+// System for camera control
+system CameraController {
+    query(CharacterController, CharacterInput)
+    params {
+        number deltaTime;
+        number smoothing = 0.2;
+    }
+    {
+        for _, entity in ipairs(entities) do
+            local controller = entity.CharacterController
+            local input = entity.CharacterInput
+            
+            if controller.model then
+                local camera = workspace.CurrentCamera
+                local targetCFrame = controller.model:GetPivot() * input.cameraOffset
+                
+                // Smooth camera movement
+                camera.CFrame = camera.CFrame:Lerp(targetCFrame, smoothing)
+            end
+        end
+    }
+} 

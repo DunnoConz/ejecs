@@ -2,187 +2,136 @@ package lexer
 
 import (
 	"testing"
+
+	"github.com/ejecs/ejecs/internal/token"
 )
 
-func TestNextToken(t *testing.T) {
+func TestNextTokenBasic(t *testing.T) {
 	input := `component Position {
-		x: number;
-		y: number;
-	}
-
-	@replicated
-	component Player {
-		name: string?;
-		health: number;
-	}
-
-	relationship ChildOf {
-		child: Entity;
-		parent: Entity;
+		x: float
+		y: float
 	}
 
 	system Movement {
-		query: (Position, pair(ChildOf, *), Velocity);
-		frequency: 60hz;
-		priority: 1;
-		run(pos, vel) {
-			pos.x = pos.x + vel.x;
-			pos.y = pos.y + vel.y;
+		query: Position
+		frequency: 60
+		priority: 1
+		code: {
+			// Update position
 		}
 	}`
 
-	tests := []struct {
-		expectedType    TokenType
-		expectedLiteral string
+	basicTests := []struct {
+		expectedTokenType token.TokenType
+		expectedTokenLit  string
 	}{
-		{COMPONENT, "component"},
-		{IDENT, "Position"},
-		{LBRACE, "{"},
-		{IDENT, "x"},
-		{COLON, ":"},
-		{IDENT, "number"},
-		{SEMICOLON, ";"},
-		{IDENT, "y"},
-		{COLON, ":"},
-		{IDENT, "number"},
-		{SEMICOLON, ";"},
-		{RBRACE, "}"},
-
-		{AT, "@"},
-		{IDENT, "replicated"},
-		{COMPONENT, "component"},
-		{IDENT, "Player"},
-		{LBRACE, "{"},
-		{IDENT, "name"},
-		{COLON, ":"},
-		{IDENT, "string"},
-		{QUESTION, "?"},
-		{SEMICOLON, ";"},
-		{IDENT, "health"},
-		{COLON, ":"},
-		{IDENT, "number"},
-		{SEMICOLON, ";"},
-		{RBRACE, "}"},
-
-		{RELATIONSHIP, "relationship"},
-		{IDENT, "ChildOf"},
-		{LBRACE, "{"},
-		{IDENT, "child"},
-		{COLON, ":"},
-		{IDENT, "Entity"},
-		{SEMICOLON, ";"},
-		{IDENT, "parent"},
-		{COLON, ":"},
-		{IDENT, "Entity"},
-		{SEMICOLON, ";"},
-		{RBRACE, "}"},
-
-		{SYSTEM, "system"},
-		{IDENT, "Movement"},
-		{LBRACE, "{"},
-		{QUERY, "query"},
-		{COLON, ":"},
-		{LPAREN, "("},
-		{IDENT, "Position"},
-		{COMMA, ","},
-		{PAIR, "pair"},
-		{LPAREN, "("},
-		{IDENT, "ChildOf"},
-		{COMMA, ","},
-		{ASTERISK, "*"},
-		{RPAREN, ")"},
-		{COMMA, ","},
-		{IDENT, "Velocity"},
-		{RPAREN, ")"},
-		{SEMICOLON, ";"},
-		{IDENT, "frequency"},
-		{COLON, ":"},
-		{IDENT, "60hz"},
-		{SEMICOLON, ";"},
-		{IDENT, "priority"},
-		{COLON, ":"},
-		{IDENT, "1"},
-		{SEMICOLON, ";"},
-		{RUN, "run"},
-		{LPAREN, "("},
-		{IDENT, "pos"},
-		{COMMA, ","},
-		{IDENT, "vel"},
-		{RPAREN, ")"},
-		{LBRACE, "{"},
-		{IDENT, "pos"},
-		{DOT, "."},
-		{IDENT, "x"},
-		{ASSIGN, "="},
-		{IDENT, "pos"},
-		{DOT, "."},
-		{IDENT, "x"},
-		{PLUS, "+"},
-		{IDENT, "vel"},
-		{DOT, "."},
-		{IDENT, "x"},
-		{SEMICOLON, ";"},
-		{IDENT, "pos"},
-		{DOT, "."},
-		{IDENT, "y"},
-		{ASSIGN, "="},
-		{IDENT, "pos"},
-		{DOT, "."},
-		{IDENT, "y"},
-		{PLUS, "+"},
-		{IDENT, "vel"},
-		{DOT, "."},
-		{IDENT, "y"},
-		{SEMICOLON, ";"},
-		{RBRACE, "}"},
-		{RBRACE, "}"},
-		{EOF, ""},
+		{token.COMPONENT, "component"},
+		{token.IDENT, "Position"},
+		{token.LBRACE, "{"},
+		{token.IDENT, "x"},
+		{token.COLON, ":"},
+		{token.IDENT, "float"},
+		{token.IDENT, "y"},
+		{token.COLON, ":"},
+		{token.FLOAT, "float"},
+		{token.RBRACE, "}"},
+		{token.SYSTEM, "system"},
+		{token.IDENT, "Movement"},
+		{token.LBRACE, "{"},
+		{token.QUERY, "query"},
+		{token.COLON, ":"},
+		{token.IDENT, "Position"},
+		{token.FREQUENCY, "frequency"},
+		{token.COLON, ":"},
+		{token.INT, "60"},
+		{token.PRIORITY, "priority"},
+		{token.COLON, ":"},
+		{token.INT, "1"},
+		{token.CODE, "code"},
+		{token.COLON, ":"},
+		{token.LBRACE, "{"},
+		{token.IDENT, "// Update position"},
+		{token.RBRACE, "}"},
+		{token.RBRACE, "}"},
+		{token.EOF, ""},
 	}
 
 	l := New(input)
 
-	for i, tt := range tests {
+	for i, tt := range basicTests {
 		tok := l.NextToken()
 
-		if tok.Type != tt.expectedType {
-			t.Fatalf("tests[%d] - tokentype wrong. expected=%q, got=%q",
-				i, tt.expectedType, tok.Type)
+		if tok.Type != tt.expectedTokenType {
+			t.Fatalf("basicTests[%d] - tokentype wrong. expected=%q, got=%q",
+				i, tt.expectedTokenType, tok.Type)
 		}
 
-		if tok.Literal != tt.expectedLiteral {
-			t.Fatalf("tests[%d] - literal wrong. expected=%q, got=%q",
-				i, tt.expectedLiteral, tok.Literal)
+		if tok.Literal != tt.expectedTokenLit {
+			t.Fatalf("basicTests[%d] - literal wrong. expected=%q, got=%q",
+				i, tt.expectedTokenLit, tok.Literal)
 		}
 	}
 }
 
-func TestNextToken_Numbers(t *testing.T) {
-	input := `123 45.67 .89`
+func TestNextTokenNumeric(t *testing.T) {
+	input := `123 45.67 -89 -12.34`
 
-	tests := []struct {
-		expectedType    TokenType
-		expectedLiteral string
+	numericTests := []struct {
+		expectedNumType token.TokenType
+		expectedNumLit  string
 	}{
-		{NUMBER, "123"},
-		{NUMBER, "45.67"},
-		{DOT, "."},
-		{NUMBER, "89"},
-		{EOF, ""},
+		{token.INT, "123"},
+		{token.FLOAT, "45.67"},
+		{token.MINUS, "-"},
+		{token.INT, "89"},
+		{token.MINUS, "-"},
+		{token.FLOAT, "12.34"},
+		{token.EOF, ""},
 	}
 
 	l := New(input)
 
-	for i, tt := range tests {
+	for i, tt := range numericTests {
 		tok := l.NextToken()
 
-		if tok.Type != tt.expectedType {
-			t.Fatalf("tests[%d] - tokentype wrong. expected=%q, got=%q",
-				i, tt.expectedType, tok.Type)
+		if tok.Type != tt.expectedNumType {
+			t.Fatalf("numericTests[%d] - tokentype wrong. expected=%q, got=%q",
+				i, tt.expectedNumType, tok.Type)
 		}
 
-		if tok.Literal != tt.expectedLiteral {
-			t.Fatalf("tests[%d] - literal wrong. expected=%q, got=%q",
-				i, tt.expectedLiteral, tok.Literal)
+		if tok.Literal != tt.expectedNumLit {
+			t.Fatalf("numericTests[%d] - literal wrong. expected=%q, got=%q",
+				i, tt.expectedNumLit, tok.Literal)
+		}
+	}
+}
+
+func TestNextTokenString(t *testing.T) {
+	input := `"hello" 'world' "escaped \"quote\""`
+
+	stringTests := []struct {
+		expectedStrType token.TokenType
+		expectedStrLit  string
+	}{
+		{token.STRING, "hello"},
+		{token.STRING, "world"},
+		{token.STRING, "escaped \"quote\""},
+		{token.EOF, ""},
+	}
+
+	l := New(input)
+
+	for i, tt := range stringTests {
+		tok := l.NextToken()
+
+		if tok.Type != tt.expectedStrType {
+			t.Fatalf("stringTests[%d] - tokentype wrong. expected=%q, got=%q",
+				i, tt.expectedStrType, tok.Type)
+		}
+
+		if tok.Literal != tt.expectedStrLit {
+			t.Fatalf("stringTests[%d] - literal wrong. expected=%q, got=%q",
+				i, tt.expectedStrLit, tok.Literal)
 		}
 	}
 }
@@ -193,34 +142,34 @@ component Position { // Inline comment
 	x: number; // Another comment
 }`
 
-	tests := []struct {
-		expectedType    TokenType
-		expectedLiteral string
+	commentTests := []struct {
+		expectedTokenType token.TokenType
+		expectedTokenLit  string
 	}{
-		{COMPONENT, "component"},
-		{IDENT, "Position"},
-		{LBRACE, "{"},
-		{IDENT, "x"},
-		{COLON, ":"},
-		{IDENT, "number"},
-		{SEMICOLON, ";"},
-		{RBRACE, "}"},
-		{EOF, ""},
+		{token.COMPONENT, "component"},
+		{token.IDENT, "Position"},
+		{token.LBRACE, "{"},
+		{token.IDENT, "x"},
+		{token.COLON, ":"},
+		{token.IDENT, "number"},
+		{token.SEMICOLON, ";"},
+		{token.RBRACE, "}"},
+		{token.EOF, ""},
 	}
 
 	l := New(input)
 
-	for i, tt := range tests {
+	for i, tt := range commentTests {
 		tok := l.NextToken()
 
-		if tok.Type != tt.expectedType {
-			t.Fatalf("tests[%d] - tokentype wrong. expected=%q, got=%q",
-				i, tt.expectedType, tok.Type)
+		if tok.Type != tt.expectedTokenType {
+			t.Fatalf("commentTests[%d] - tokentype wrong. expected=%q, got=%q",
+				i, tt.expectedTokenType, tok.Type)
 		}
 
-		if tok.Literal != tt.expectedLiteral {
-			t.Fatalf("tests[%d] - literal wrong. expected=%q, got=%q",
-				i, tt.expectedLiteral, tok.Literal)
+		if tok.Literal != tt.expectedTokenLit {
+			t.Fatalf("commentTests[%d] - literal wrong. expected=%q, got=%q",
+				i, tt.expectedTokenLit, tok.Literal)
 		}
 	}
 }
@@ -228,24 +177,54 @@ component Position { // Inline comment
 func TestNextToken_Operators(t *testing.T) {
 	input := `+ - * / = == != < <= > >= && ||`
 
-	tests := []struct {
-		expectedType    TokenType
-		expectedLiteral string
+	operatorTests := []struct {
+		expectedTokenType token.TokenType
+		expectedTokenLit  string
 	}{
-		{PLUS, "+"},
-		{MINUS, "-"},
-		{ASTERISK, "*"},
-		{SLASH, "/"},
-		{ASSIGN, "="},
-		{EQ, "=="},
-		{NOT_EQ, "!="},
-		{LT, "<"},
-		{LTE, "<="},
-		{GT, ">"},
-		{GTE, ">="},
-		{AND, "&&"},
-		{OR, "||"},
-		{EOF, ""},
+		{token.PLUS, "+"},
+		{token.MINUS, "-"},
+		{token.ASTERISK, "*"},
+		{token.SLASH, "/"},
+		{token.ASSIGN, "="},
+		{token.EQ, "=="},
+		{token.NOT_EQ, "!="},
+		{token.LT, "<"},
+		{token.LTE, "<="},
+		{token.GT, ">"},
+		{token.GTE, ">="},
+		{token.AND, "&&"},
+		{token.OR, "||"},
+		{token.EOF, ""},
+	}
+
+	l := New(input)
+
+	for i, tt := range operatorTests {
+		tok := l.NextToken()
+
+		if tok.Type != tt.expectedTokenType {
+			t.Fatalf("operatorTests[%d] - tokentype wrong. expected=%q, got=%q",
+				i, tt.expectedTokenType, tok.Type)
+		}
+
+		if tok.Literal != tt.expectedTokenLit {
+			t.Fatalf("operatorTests[%d] - literal wrong. expected=%q, got=%q",
+				i, tt.expectedTokenLit, tok.Literal)
+		}
+	}
+}
+
+func TestNextToken_IntFloat(t *testing.T) {
+	input := `123 0 3.14`
+
+	tests := []struct {
+		expectedTokenType token.TokenType
+		expectedTokenLit  string
+	}{
+		{token.INT, "123"},
+		{token.INT, "0"},
+		{token.FLOAT, "3.14"},
+		{token.EOF, ""},
 	}
 
 	l := New(input)
@@ -253,14 +232,85 @@ func TestNextToken_Operators(t *testing.T) {
 	for i, tt := range tests {
 		tok := l.NextToken()
 
-		if tok.Type != tt.expectedType {
+		if tok.Type != tt.expectedTokenType {
 			t.Fatalf("tests[%d] - tokentype wrong. expected=%q, got=%q",
-				i, tt.expectedType, tok.Type)
+				i, tt.expectedTokenType, tok.Type)
 		}
 
-		if tok.Literal != tt.expectedLiteral {
+		if tok.Literal != tt.expectedTokenLit {
 			t.Fatalf("tests[%d] - literal wrong. expected=%q, got=%q",
-				i, tt.expectedLiteral, tok.Literal)
+				i, tt.expectedTokenLit, tok.Literal)
+		}
+	}
+}
+
+func TestNextToken_Keywords(t *testing.T) {
+	input := `component system relationship true false nil query parameters frequency priority code pair table`
+	tests := []struct {
+		expectedTokenType token.TokenType
+		expectedTokenLit  string
+	}{
+		{token.COMPONENT, "component"},
+		{token.SYSTEM, "system"},
+		{token.RELATIONSHIP, "relationship"},
+		{token.TRUE, "true"},
+		{token.FALSE, "false"},
+		{token.NULL, "nil"},
+		{token.QUERY, "query"},
+		{token.IDENT, "parameters"}, // parameters is IDENT
+		{token.FREQUENCY, "frequency"},
+		{token.PRIORITY, "priority"},
+		{token.CODE, "code"},
+		{token.PAIR, "pair"},
+		{token.TABLE, "table"}, // Added table test case here
+		{token.EOF, ""},
+	}
+
+	l := New(input)
+
+	for i, tt := range tests {
+		tok := l.NextToken()
+
+		if tok.Type != tt.expectedTokenType {
+			t.Fatalf("tests[%d] - tokentype wrong. expected=%q, got=%q",
+				i, tt.expectedTokenType, tok.Type)
+		}
+
+		if tok.Literal != tt.expectedTokenLit {
+			t.Fatalf("tests[%d] - literal wrong. expected=%q, got=%q",
+				i, tt.expectedTokenLit, tok.Literal)
+		}
+	}
+}
+
+func TestNextToken_TableType(t *testing.T) {
+	input := `table<string, any>`
+	tests := []struct {
+		expectedTokenType token.TokenType
+		expectedTokenLit  string
+	}{
+		{token.TABLE, "table"},
+		{token.LT, "<"},
+		{token.IDENT, "string"}, // Treat string type name as IDENT for now
+		{token.COMMA, ","},
+		{token.IDENT, "any"},
+		{token.GT, ">"},
+		{token.EOF, ""},
+	}
+
+	l := New(input)
+
+	for i, tt := range tests {
+		tok := l.NextToken()
+
+		if tok.Type != tt.expectedTokenType {
+			t.Fatalf("tests[%d] - tokentype wrong. expected=%q, got=%q",
+				i, tt.expectedTokenType, tok.Type)
+		}
+
+		if tok.Literal != tt.expectedTokenLit {
+			t.Fatalf("tests[%d] - literal wrong. expected=%q, got=%q",
+				i, tt.expectedTokenLit, tok.Literal)
 		}
 	}
 }

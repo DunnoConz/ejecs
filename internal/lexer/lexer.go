@@ -1,61 +1,35 @@
 package lexer
 
-type TokenType string
+import (
+	"strings"
 
-const (
-	ILLEGAL = "ILLEGAL"
-	EOF     = "EOF"
-
-	// Identifiers + literals
-	IDENT  = "IDENT"
-	NUMBER = "NUMBER"
-	STRING = "STRING"
-
-	// Operators
-	COLON     = ":"
-	SEMICOLON = ";"
-	COMMA     = ","
-	ASTERISK  = "*"
-	DOT       = "."
-	PLUS      = "+"
-	MINUS     = "-"
-	SLASH     = "/"
-	ASSIGN    = "="
-	PLUSEQ    = "+="
-	EQ        = "=="
-	NOT_EQ    = "!="
-	LT        = "<"
-	LTE       = "<="
-	GT        = ">"
-	GTE       = ">="
-	AND       = "&&"
-	OR        = "||"
-
-	// Delimiters
-	LPAREN = "("
-	RPAREN = ")"
-	LBRACE = "{"
-	RBRACE = "}"
-
-	// Special characters
-	AT       = "@"
-	QUESTION = "?"
-
-	// Keywords
-	COMPONENT    = "component"
-	RELATIONSHIP = "relationship"
-	SYSTEM       = "system"
-	QUERY        = "query"
-	RUN          = "run"
-	PAIR         = "pair"
-	GET_TARGET   = "getTarget"
+	"github.com/ejecs/ejecs/internal/token"
 )
 
-type Token struct {
-	Type    TokenType
-	Literal string
-	Line    int
-	Column  int
+// No local const needed as all required tokens exist in token package
+
+var keywords = map[string]token.TokenType{
+	"component":    token.COMPONENT,
+	"system":       token.SYSTEM,
+	"relationship": token.RELATIONSHIP,
+	"true":         token.TRUE,
+	"false":        token.FALSE,
+	"nil":          token.NULL,
+	"query":        token.QUERY,
+	"parameters":   token.IDENT, // Treat as IDENT, requires parser handling
+	"frequency":    token.FREQUENCY,
+	"priority":     token.PRIORITY,
+	"code":         token.CODE,
+	"pair":         token.PAIR,
+	"table":        token.TABLE,
+	// "any" is treated as IDENT by lookupIdent
+	// Roblox types are treated as IDENT by lookupIdent
+	"Instance": token.IDENT,
+	"Vector2":  token.IDENT,
+	"Vector3":  token.IDENT,
+	"CFrame":   token.IDENT,
+	"Color3":   token.IDENT,
+	"Enum":     token.IDENT,
 }
 
 type Lexer struct {
@@ -75,12 +49,10 @@ func New(input string) *Lexer {
 
 func (l *Lexer) readChar() {
 	if l.readPosition >= len(l.input) {
-		l.ch = 0
+		l.ch = 0 // NUL character signifies EOF
 	} else {
 		l.ch = l.input[l.readPosition]
 	}
-	l.position = l.readPosition
-	l.readPosition++
 
 	if l.ch == '\n' {
 		l.line++
@@ -88,124 +60,145 @@ func (l *Lexer) readChar() {
 	} else {
 		l.column++
 	}
+
+	l.position = l.readPosition
+	l.readPosition++
 }
 
-func (l *Lexer) NextToken() Token {
-	var tok Token
+func (l *Lexer) NextToken() token.Token {
+	var tok token.Token
 
 	l.skipWhitespace()
 
-	tok.Line = l.line
-	tok.Column = l.column
+	startLine := l.line
+	startColumn := l.column
 
 	switch l.ch {
-	case ':':
-		tok = newToken(COLON, l.ch)
-	case ';':
-		tok = newToken(SEMICOLON, l.ch)
-	case ',':
-		tok = newToken(COMMA, l.ch)
-	case '(':
-		tok = newToken(LPAREN, l.ch)
-	case ')':
-		tok = newToken(RPAREN, l.ch)
-	case '{':
-		tok = newToken(LBRACE, l.ch)
-	case '}':
-		tok = newToken(RBRACE, l.ch)
-	case '*':
-		tok = newToken(ASTERISK, l.ch)
-	case '.':
-		if isDigit(l.peekChar()) {
-			l.readChar() // consume the dot
-			tok.Literal = "." + l.readNumber()
-			tok.Type = NUMBER
-			return tok
-		}
-		tok = newToken(DOT, l.ch)
-	case '+':
-		if l.peekChar() == '=' {
-			l.readChar()
-			tok = Token{Type: PLUSEQ, Literal: "+="}
-		} else {
-			tok = newToken(PLUS, l.ch)
-		}
-	case '-':
-		tok = newToken(MINUS, l.ch)
-	case '/':
-		if l.peekChar() == '/' {
-			// Skip comment
-			l.skipComment()
-			return l.NextToken()
-		}
-		tok = newToken(SLASH, l.ch)
 	case '=':
 		if l.peekChar() == '=' {
+			ch := l.ch
 			l.readChar()
-			tok = Token{Type: EQ, Literal: "=="}
+			literal := string(ch) + string(l.ch)
+			tok = token.New(token.EQ, literal, startLine, startColumn)
 		} else {
-			tok = newToken(ASSIGN, l.ch)
+			tok = token.New(token.ASSIGN, string(l.ch), startLine, startColumn)
 		}
 	case '!':
 		if l.peekChar() == '=' {
+			ch := l.ch
 			l.readChar()
-			tok = Token{Type: NOT_EQ, Literal: "!="}
+			literal := string(ch) + string(l.ch)
+			tok = token.New(token.NOT_EQ, literal, startLine, startColumn)
 		} else {
-			tok = newToken(ILLEGAL, l.ch)
+			tok = token.New(token.BANG, string(l.ch), startLine, startColumn)
 		}
 	case '<':
 		if l.peekChar() == '=' {
+			ch := l.ch
 			l.readChar()
-			tok = Token{Type: LTE, Literal: "<="}
+			literal := string(ch) + string(l.ch)
+			tok = token.New(token.LTE, literal, startLine, startColumn)
 		} else {
-			tok = newToken(LT, l.ch)
+			tok = token.New(token.LT, string(l.ch), startLine, startColumn)
 		}
 	case '>':
 		if l.peekChar() == '=' {
+			ch := l.ch
 			l.readChar()
-			tok = Token{Type: GTE, Literal: ">="}
+			literal := string(ch) + string(l.ch)
+			tok = token.New(token.GTE, literal, startLine, startColumn)
 		} else {
-			tok = newToken(GT, l.ch)
+			tok = token.New(token.GT, string(l.ch), startLine, startColumn)
+		}
+	case '+':
+		if l.peekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			literal := string(ch) + string(l.ch)
+			tok = token.New(token.PLUSEQ, literal, startLine, startColumn)
+		} else {
+			tok = token.New(token.PLUS, string(l.ch), startLine, startColumn)
 		}
 	case '&':
 		if l.peekChar() == '&' {
+			ch := l.ch
 			l.readChar()
-			tok = Token{Type: AND, Literal: "&&"}
+			literal := string(ch) + string(l.ch)
+			tok = token.New(token.AND, literal, startLine, startColumn)
 		} else {
-			tok = newToken(ILLEGAL, l.ch)
+			tok = token.New(token.ILLEGAL, string(l.ch), startLine, startColumn)
 		}
 	case '|':
 		if l.peekChar() == '|' {
+			ch := l.ch
 			l.readChar()
-			tok = Token{Type: OR, Literal: "||"}
+			literal := string(ch) + string(l.ch)
+			tok = token.New(token.OR, literal, startLine, startColumn)
 		} else {
-			tok = newToken(ILLEGAL, l.ch)
+			tok = token.New(token.ILLEGAL, string(l.ch), startLine, startColumn)
 		}
+	case '/':
+		if l.peekChar() == '/' {
+			l.readComment()
+			return l.NextToken()
+		} else {
+			tok = token.New(token.SLASH, string(l.ch), startLine, startColumn)
+		}
+	case '-':
+		tok = token.New(token.MINUS, string(l.ch), startLine, startColumn)
+	case '*':
+		tok = token.New(token.ASTERISK, string(l.ch), startLine, startColumn)
+	case '.':
+		tok = token.New(token.DOT, string(l.ch), startLine, startColumn)
+	case ',':
+		tok = token.New(token.COMMA, string(l.ch), startLine, startColumn)
+	case ';':
+		tok = token.New(token.SEMICOLON, string(l.ch), startLine, startColumn)
+	case ':':
+		tok = token.New(token.COLON, string(l.ch), startLine, startColumn)
+	case '(':
+		tok = token.New(token.LPAREN, string(l.ch), startLine, startColumn)
+	case ')':
+		tok = token.New(token.RPAREN, string(l.ch), startLine, startColumn)
+	case '{':
+		tok = token.New(token.LBRACE, string(l.ch), startLine, startColumn)
+	case '}':
+		tok = token.New(token.RBRACE, string(l.ch), startLine, startColumn)
 	case '@':
-		tok = newToken(AT, l.ch)
+		tok = token.New(token.AT, string(l.ch), startLine, startColumn)
 	case '?':
-		tok = newToken(QUESTION, l.ch)
+		tok = token.New(token.QUESTION, string(l.ch), startLine, startColumn)
+	case '[':
+		tok = token.New(token.LBRACKET, string(l.ch), startLine, startColumn) // Use token.LBRACKET
+	case ']':
+		tok = token.New(token.RBRACKET, string(l.ch), startLine, startColumn) // Use token.RBRACKET
+	case '"', '\'':
+		tok.Literal = l.readString(l.ch)
+		tok.Type = token.STRING
+		tok.Line = startLine
+		tok.Column = startColumn
+		if l.ch == '"' || l.ch == '\'' { // Check if readString stopped at a quote
+			l.readChar() // Consume the closing quote
+		}
+		return tok
 	case 0:
-		tok.Literal = ""
-		tok.Type = EOF
+		tok = token.New(token.EOF, "", startLine, startColumn)
 	default:
 		if isLetter(l.ch) {
-			tok.Literal = l.readIdentifier()
-			tok.Type = l.lookupIdent(tok.Literal)
+			literal := l.readIdentifier()
+			tokType := lookupIdent(literal)
+			tok = token.New(tokType, literal, startLine, startColumn)
 			return tok
 		} else if isDigit(l.ch) {
 			literal := l.readNumber()
-			// Check if this is part of an identifier (like 60hz)
-			if isLetter(l.ch) {
-				literal += l.readIdentifier()
-				tok.Type = IDENT
-			} else {
-				tok.Type = NUMBER
+			var numTokType token.TokenType = token.INT
+			if strings.Contains(literal, ".") {
+				numTokType = token.FLOAT
 			}
-			tok.Literal = literal
+			tok = token.New(token.TokenType(numTokType), literal, startLine, startColumn)
 			return tok
 		} else {
-			tok = newToken(ILLEGAL, l.ch)
+			tok = token.New(token.ILLEGAL, string(l.ch), startLine, startColumn)
 		}
 	}
 
@@ -213,47 +206,64 @@ func (l *Lexer) NextToken() Token {
 	return tok
 }
 
+func lookupIdent(ident string) token.TokenType {
+	// Restore original lookup logic
+	if tokType, ok := keywords[ident]; ok {
+		return tokType // Returns token.TokenType from map
+	}
+	// Treat unknown identifiers (like Roblox types not explicitly mapped, 'any', etc.) as IDENT
+	return token.IDENT
+}
+
+// ... Helper functions (skipWhitespace, readIdentifier, readNumber, readString, readComment, peekChar, isLetter, isDigit) ...
+
 func (l *Lexer) skipWhitespace() {
 	for l.ch == ' ' || l.ch == '\t' || l.ch == '\n' || l.ch == '\r' {
 		l.readChar()
 	}
 }
 
-func (l *Lexer) skipComment() {
-	for l.ch != '\n' && l.ch != 0 {
-		l.readChar()
-	}
-}
-
 func (l *Lexer) readIdentifier() string {
 	position := l.position
-	// First character must be a letter or underscore
-	if isLetter(l.ch) {
+	for isLetter(l.ch) || isDigit(l.ch) {
 		l.readChar()
-		// Subsequent characters can be letters, digits, or special cases like 'hz'
-		for isLetter(l.ch) || isDigit(l.ch) {
-			l.readChar()
-		}
 	}
 	return l.input[position:l.position]
 }
 
 func (l *Lexer) readNumber() string {
 	position := l.position
-	for isDigit(l.ch) {
+	for isDigit(l.ch) || (l.ch == '.' && isDigit(l.peekChar())) { // Allow dot only if followed by digit
 		l.readChar()
-	}
-	if l.ch == '.' {
-		l.readChar()
-		for isDigit(l.ch) {
-			l.readChar()
-		}
-	}
-	// If the next character is a letter, this is part of an identifier
-	if isLetter(l.ch) {
-		return l.input[position:l.position]
 	}
 	return l.input[position:l.position]
+}
+
+func (l *Lexer) readString(quote byte) string {
+	position := l.position + 1 // Start after the opening quote
+	for {
+		l.readChar()
+		if l.ch == quote || l.ch == 0 {
+			break
+		}
+		// TODO: Handle escape sequences
+	}
+	str := l.input[position:l.position] // Should exclude quotes
+	return str
+}
+
+func (l *Lexer) readComment() {
+	for l.ch != '\n' && l.ch != 0 {
+		l.readChar()
+	}
+}
+
+func (l *Lexer) peekChar() byte {
+	if l.readPosition >= len(l.input) {
+		return 0
+	} else {
+		return l.input[l.readPosition]
+	}
 }
 
 func isLetter(ch byte) bool {
@@ -262,36 +272,4 @@ func isLetter(ch byte) bool {
 
 func isDigit(ch byte) bool {
 	return '0' <= ch && ch <= '9'
-}
-
-func newToken(tokenType TokenType, ch byte) Token {
-	return Token{Type: tokenType, Literal: string(ch)}
-}
-
-func (l *Lexer) lookupIdent(ident string) TokenType {
-	switch ident {
-	case "component":
-		return COMPONENT
-	case "relationship":
-		return RELATIONSHIP
-	case "system":
-		return SYSTEM
-	case "query":
-		return QUERY
-	case "run":
-		return RUN
-	case "pair":
-		return PAIR
-	case "getTarget":
-		return GET_TARGET
-	default:
-		return IDENT
-	}
-}
-
-func (l *Lexer) peekChar() byte {
-	if l.readPosition >= len(l.input) {
-		return 0
-	}
-	return l.input[l.readPosition]
 }

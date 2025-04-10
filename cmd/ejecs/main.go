@@ -13,14 +13,22 @@ import (
 
 func main() {
 	// Define flags
-	inputFile := flag.String("input", "", "Input JECS file")
-	outputFile := flag.String("output", "", "Output file for generated code")
+	inputFile := flag.String("input", "", "Input EJECS file")
+	outputFile := flag.String("output", "", "Output file for generated Luau code")
+	// library := flag.String("library", "jecs", "Target ECS library (ecr or jecs)") // Removed library flag
 	flag.Parse()
 
 	if *inputFile == "" || *outputFile == "" {
-		fmt.Println("Usage: ejecs -input <input.jecs> -output <output.cpp>")
+		// fmt.Println("Usage: ejecs -input <input.jecs> -output <output.luau> -library <ecr|jecs>") // Old usage message
+		fmt.Println("Usage: ejecs -input <input.jecs> -output <output.luau>")
 		os.Exit(1)
 	}
+
+	// Validate library - Removed validation
+	// if *library != "ecr" && *library != "jecs" {
+	// 	fmt.Printf("Error: library must be either 'ecr' or 'jecs', got '%s'\n", *library)
+	// 	os.Exit(1)
+	// }
 
 	// Read input file
 	content, err := os.ReadFile(*inputFile)
@@ -31,14 +39,24 @@ func main() {
 
 	// Parse the content
 	p := parser.New(string(content))
-	ast, err := p.Parse()
+	ast, err := p.ParseProgram()
 	if err != nil {
-		fmt.Printf("Parse error: %v\n", err)
+		// Check for parser errors
+		if p.Errors() != nil && len(p.Errors()) > 0 {
+			fmt.Println("Parse errors:")
+			for _, msg := range p.Errors() {
+				fmt.Println("-", msg)
+			}
+		} else {
+			// Print general parse error if no specific messages
+			fmt.Printf("Parse error: %v\n", err)
+		}
 		os.Exit(1)
 	}
 
 	// Generate code
-	g := generator.New()
+	// g := generator.New(generator.Config{Library: *library}) // Old generator instantiation
+	g := generator.New() // Simplified generator instantiation
 	code, err := g.Generate(ast)
 	if err != nil {
 		fmt.Printf("Generation error: %v\n", err)
@@ -58,6 +76,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// fmt.Printf("Successfully generated %s for %s library\n", *outputFile, *library) // Old success message
 	fmt.Printf("Successfully generated %s\n", *outputFile)
 }
 
