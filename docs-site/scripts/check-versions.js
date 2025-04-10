@@ -8,9 +8,10 @@ function checkVersions() {
     : null;
 
   // Check Node.js version
-  const nodeVersion = process.version;
-  if (!nodeVersion.startsWith('v18')) {
-    console.error('❌ Node.js version must be 18.x');
+  const nodeVersion = process.version.slice(1); // Remove 'v' prefix
+  const major = parseInt(nodeVersion.split('.')[0]);
+  if (major < 18) {
+    console.error('❌ Node.js version must be 18.0.0 or higher');
     process.exit(1);
   }
 
