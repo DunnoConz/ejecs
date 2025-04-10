@@ -10,13 +10,12 @@ export default defineNuxtConfig({
   ],
 
   app: {
-    baseURL: '/ejecs/', // GitHub Pages repository name
     head: {
       title: 'EJECS Documentation',
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { name: 'description', content: 'Documentation for the EJECS Entity Component System for Roblox' }
+        { name: 'description', content: 'Documentation for the EJECS Entity Component System' }
       ],
       link: [
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }
@@ -24,10 +23,11 @@ export default defineNuxtConfig({
     }
   },
 
+  // @ts-ignore
   content: {
     highlight: {
       theme: 'github-light',
-      preload: ['lua', 'typescript']
+      preload: ['cpp', 'typescript', 'bash']
     },
     markdown: {
       toc: {
@@ -35,6 +35,11 @@ export default defineNuxtConfig({
         searchDepth: 4
       }
     }
+  },
+
+  ssr: true,
+  nitro: {
+    preset: 'cloudflare-pages'
   },
 
   compatibilityDate: '2025-04-09'
