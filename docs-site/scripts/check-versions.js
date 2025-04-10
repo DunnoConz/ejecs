@@ -18,7 +18,8 @@ function checkVersions() {
   const criticalDeps = {
     '@cloudflare/kv-asset-handler': '0.3.4',
     '@cloudflare/workers-types': '4.20250410.0',
-    'wrangler': '3.114.5'
+    'wrangler': '3.114.5',
+    'typescript': '5.0.4'
   };
 
   for (const [dep, version] of Object.entries(criticalDeps)) {

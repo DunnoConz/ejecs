@@ -22,7 +22,7 @@
     "@nuxtjs/tailwindcss": "6.10.0",
     "@cloudflare/kv-asset-handler": "0.3.4",
     "@cloudflare/workers-types": "4.20250410.0",
-    "typescript": "5.3.0",
+    "typescript": "5.0.4",
     "wrangler": "3.114.5"
   },
   "engines": {
