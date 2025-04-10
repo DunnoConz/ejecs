@@ -4,150 +4,133 @@
     
     <div class="prose prose-lg">
       <p class="mb-6">
-        EJECS generates type-safe, optimized code from your IDL definitions. The generated code includes
-        type definitions, validation logic, network replication, and system templates that you can implement
-        in your game code.
+        EJECS generates highly optimized C++ code from your component and system definitions. The generated code includes
+        type definitions, efficient component storage, parallel system execution, and automatic memory management.
       </p>
 
       <h2 class="text-2xl font-semibold mt-8 mb-4">Generation Process</h2>
       <p class="mb-4">EJECS follows these steps when generating code:</p>
       <ol class="list-decimal pl-6 mb-6">
-        <li>Parse and validate IDL files</li>
-        <li>Generate type definitions</li>
-        <li>Create component storage and access code</li>
-        <li>Build system templates</li>
-        <li>Set up network replication</li>
-        <li>Generate event handling code</li>
+        <li>Parse and validate EJECS files</li>
+        <li>Generate C++ type definitions</li>
+        <li>Create optimized component storage</li>
+        <li>Build system implementations with parallel execution</li>
+        <li>Generate memory management code</li>
+        <li>Add debug instrumentation</li>
       </ol>
 
       <h2 class="text-2xl font-semibold mt-8 mb-4">Generated Files</h2>
       <p class="mb-4">The compiler produces several files:</p>
       <pre class="bg-gray-100 p-4 rounded-md mb-6"><code>generated/
-  ├── Types.lua           -- Type definitions
-  ├── Components/         -- Component implementations
-  │   ├── Position.lua
-  │   ├── Velocity.lua
+  ├── types.hpp           // Type definitions
+  ├── components/         // Component implementations
+  │   ├── position.hpp
+  │   ├── velocity.hpp
   │   └── ...
-  ├── Systems/           -- System templates
-  │   ├── Movement.lua
-  │   ├── Combat.lua
+  ├── systems/           // System implementations
+  │   ├── movement.hpp
+  │   ├── combat.hpp
   │   └── ...
-  ├── Events/           -- Event definitions and handlers
-  │   ├── Damage.lua
-  │   ├── Collision.lua
+  ├── storage/          // Component storage
+  │   ├── archetype.hpp
+  │   ├── sparse_set.hpp
   │   └── ...
-  └── Network/          -- Network replication code
-      ├── Replication.lua
-      └── Authority.lua</code></pre>
+  └── debug/            // Debug utilities
+      ├── profiler.hpp
+      └── inspector.hpp</code></pre>
 
       <h2 class="text-2xl font-semibold mt-8 mb-4">Type Definitions</h2>
       <p class="mb-4">Generated type definitions include:</p>
-      <pre class="bg-gray-100 p-4 rounded-md mb-6"><code>-- Generated from EJECS definitions
-export type Entity = number
+      <pre class="bg-gray-100 p-4 rounded-md mb-6"><code>// Generated from EJECS definitions
+using Entity = std::uint32_t;
 
-export type Position = {
-    x: number,
-    y: number,
-    z: number
-}
+struct Position {
+    float x;
+    float y;
+    float z;
+};
 
-export type ComponentStorage<T> = {
-    get: (entity: Entity) -> T?,
-    set: (entity: Entity, value: T) -> (),
-    remove: (entity: Entity) -> (),
-    has: (entity: Entity) -> boolean
-}
-
-export type SystemContext = {
-    world: World,
-    storage: {[string]: ComponentStorage<any>},
-    events: EventDispatcher,
-    network: NetworkManager
-}</code></pre>
+template&lt;typename T&gt;
+class ComponentStorage {
+public:
+    T* get(Entity entity);
+    void set(Entity entity, const T& value);
+    void remove(Entity entity);
+    bool has(Entity entity) const;
+private:
+    SparseSet&lt;T&gt; storage;
+};</code></pre>
 
       <h2 class="text-2xl font-semibold mt-8 mb-4">Component Implementation</h2>
-      <p class="mb-4">Generated component code includes storage and validation:</p>
-      <pre class="bg-gray-100 p-4 rounded-md mb-6"><code>-- Generated Position component
-local Position = {}
-
-function Position.new()
-    return {
-        storage = {},
-        validate = function(value)
-            return type(value) == "table"
-                and type(value.x) == "number"
-                and type(value.y) == "number"
-                and type(value.z) == "number"
-        end,
-        
-        get = function(self, entity)
-            return self.storage[entity]
-        end,
-        
-        set = function(self, entity, value)
-            assert(self:validate(value), "Invalid Position data")
-            self.storage[entity] = value
-        end
+      <p class="mb-4">Generated component code includes optimized storage and SIMD operations:</p>
+      <pre class="bg-gray-100 p-4 rounded-md mb-6"><code>// Generated Position component
+class PositionStorage : public ComponentStorage&lt;Position&gt; {
+public:
+    void update_batch(Entity* entities, size_t count) {
+        #pragma omp simd
+        for (size_t i = 0; i < count; i++) {
+            auto pos = get(entities[i]);
+            // SIMD optimized operations
+        }
     }
-end
+    
+    // Memory-aligned allocation
+    Position* allocate(size_t count) {
+        return static_cast&lt;Position*&gt;(
+            std::aligned_alloc(32, count * sizeof(Position))
+        );
+    }
+};</code></pre>
 
-return Position</code></pre>
-
-      <h2 class="text-2xl font-semibold mt-8 mb-4">System Templates</h2>
-      <p class="mb-4">Generated system templates ready for implementation:</p>
-      <pre class="bg-gray-100 p-4 rounded-md mb-6"><code>-- Generated Movement system template
-local Types = require(script.Parent.Parent.Types)
-
-local MovementSystem = {}
-
-function MovementSystem.new()
-    return {
-        name = "Movement",
-        priority = 1,
-        frequency = 60,
+      <h2 class="text-2xl font-semibold mt-8 mb-4">System Implementation</h2>
+      <p class="mb-4">Generated systems with parallel execution:</p>
+      <pre class="bg-gray-100 p-4 rounded-md mb-6"><code>// Generated Movement system
+class MovementSystem {
+public:
+    static constexpr int Priority = 1;
+    static constexpr int Frequency = 60;
+    
+    void update(World& world) {
+        auto& positions = world.get_storage&lt;Position&gt;();
+        auto& velocities = world.get_storage&lt;Velocity&gt;();
         
-        components = {
-            "Position",
-            "Velocity"
-        },
+        auto view = world.view&lt;Position, Velocity&gt;();
         
-        -- Implement this function
-        update = function(context)
-            local world = context.world
-            local pos = context.storage.Position
-            local vel = context.storage.Velocity
+        #pragma omp parallel for
+        for (const auto entity : view) {
+            auto pos = positions.get(entity);
+            auto vel = velocities.get(entity);
             
-            -- Your implementation here
-        end
+            pos->x += vel->x;
+            pos->y += vel->y;
+            pos->z += vel->z;
+        }
     }
-end
-
-return MovementSystem</code></pre>
+};</code></pre>
 
       <h2 class="text-2xl font-semibold mt-8 mb-4">Compiler Options</h2>
       <p class="mb-4">Configure code generation with compiler flags:</p>
       <pre class="bg-gray-100 p-4 rounded-md mb-6"><code># Basic compilation
-ejecs compile *.jecs
+ejecs -input game.jecs -output game.cpp
 
 # Generate with specific options
-ejecs compile *.jecs \
-    --out src/generated \
-    --format luau \
+ejecs -input game.jecs -output game.cpp \
     --optimize \
-    --strict-types \
-    --generate-tests</code></pre>
+    --simd \
+    --parallel \
+    --debug-info</code></pre>
 
       <div class="mt-8 p-4 bg-blue-50 rounded-md">
         <h3 class="text-xl font-semibold mb-2">💡 Pro Tip</h3>
         <p>
-          Use the <code>--watch</code> flag during development to automatically regenerate code when your
-          IDL files change. This keeps your implementation in sync with your definitions.
+          Use the <code>--debug-info</code> flag during development to include profiling and inspection tools
+          in the generated code. This helps identify performance bottlenecks and debug issues.
         </p>
       </div>
 
       <h2 class="text-2xl font-semibold mt-8 mb-4">Next Steps</h2>
       <p class="mb-4">
-        Now that you understand how EJECS works, check out our 
+        Now that you understand how EJECS generates optimized code, check out our 
         <NuxtLink to="/docs/examples" class="text-blue-600 hover:text-blue-800">Example Projects</NuxtLink>
         to see it in action.
       </p>
